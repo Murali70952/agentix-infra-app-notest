@@ -2,7 +2,7 @@
 name: "agentix-ui"
 replicaCount: 1
 image:
-  repository: "sidontlslkdmls"
+  repository: "sejfisejfsifisfskufhsh/agentix-ui"
   tag: "latest"
   pullPolicy: "IfNotPresent"
   pullSecrets: []
