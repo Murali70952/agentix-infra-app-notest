@@ -1,0 +1,99 @@
+{{- if (and (.Values.preInstall) (.Values.preInstall.enabled)) }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "common.fullname" . }}-pre-install
+  labels:
+    {{- include "common.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": "pre-install,pre-upgrade"
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        app: {{ include "common.fullname" . }}-pre-install
+    spec:
+      restartPolicy: Never
+
+      # ✅ mount same volumes (e.g., postgres SSL certs)
+      {{- if .Values.extraVolumes }}
+      volumes:
+        {{- range .Values.extraVolumes }}
+        - name: {{ .name }}
+          {{- if .secret }}
+          secret:
+            secretName: {{ .secret.secretName }}
+            {{- if .secret.defaultMode }}
+            defaultMode: {{ .secret.defaultMode }}
+            {{- end }}
+            {{- if .secret.items }}
+            items:
+              {{- range .secret.items }}
+              - key: {{ .key }}
+                path: {{ .path }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
+        {{- end }}
+      {{- end }}
+
+      containers:
+        - name: pre-install
+
+          # ✅ use DEPLOYMENT image + Jenkins tag
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+
+          # ✅ use ALL deployment env vars
+          env:
+            # --- plain env vars
+            {{- if .Values.env }}
+            {{- range $key, $val := .Values.env }}
+            - name: {{ $key }}
+              value: "{{ $val }}"
+            {{- end }}
+            {{- end }}
+
+            # --- envVarsConfig
+            {{- if .Values.envVarsConfig }}
+            {{- range .Values.envVarsConfig }}
+            - name: {{ .name }}
+              value: "{{ .value }}"
+            {{- end }}
+            {{- end }}
+
+            # --- secret-based env vars
+            {{- if .Values.extraSecretEnv }}
+            {{- range .Values.extraSecretEnv }}
+            - name: {{ .name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secretName }}
+                  key: {{ .secretKey }}
+            {{- end }}
+            {{- end }}
+
+          # ✅ mount same volumes (DB SSL certs)
+          {{- if .Values.extraVolumeMounts }}
+          volumeMounts:
+            {{- range .Values.extraVolumeMounts }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath }}
+              {{- if .readOnly }}
+              readOnly: true
+              {{- end }}
+            {{- end }}
+          {{- end }}
+
+          command: ["/bin/sh", "-c"]
+          args:
+            - >
+              uv run --package backend --python /opt/venv/bin/python
+              --index-url "https://{{ .Values.env.UV_PUBLISH_USERNAME }}:{{ .Values.env.UV_PUBLISH_PASSWORD }}@artifactory.hdfcbank.com/artifactory/api/pypi/genai-python-virtual/simple"
+              --extra-index-url "https://{{ .Values.env.UV_PUBLISH_USERNAME }}:{{ .Values.env.UV_PUBLISH_PASSWORD }}@artifactory.hdfcbank.com/artifactory/api/pypi/genai-python-remote/simple"
+              alembic -c alembic.ini upgrade head
+
+{{- end }}

@@ -1,0 +1,40 @@
+# Generated for agentix-ui (uat)
+name: "agentix-ui"
+replicaCount: 1
+image:
+  repository: "sdkmfdkvndf"
+  tag: "latest"
+  pullPolicy: "IfNotPresent"
+  pullSecrets: []
+serviceAccount:
+  create: true
+  automountServiceAccountToken: true
+service:
+  type: "ClusterIP"
+  port: 80
+  targetPort: 8080
+health:
+  readiness:
+    enabled: true
+    path: "/"
+  liveness:
+    enabled: true
+    path: "/"
+resources:
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+  limits:
+    cpu: "1"
+    memory: "1Gi"
+env: {}
+extraSecretEnv: []
+externalSecrets:
+  enabled: false
+  targetSecretName: "agentix-ui-secrets"
+  secretStore:
+    name: "gcp-secret-store"
+    kind: "ClusterSecretStore"
+  data: []
+preInstall:
+  enabled: false
