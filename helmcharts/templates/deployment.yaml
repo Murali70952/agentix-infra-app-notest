@@ -1,0 +1,135 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "common.fullname" . }}-deploy
+  labels:
+    {{- include "common.labels" . | nindent 4 }}
+
+spec:
+  replicas: {{ .Values.replicaCount | default 1 }}
+
+  selector:
+    matchLabels:
+      app: {{ include "common.fullname" . }}
+
+  template:
+    metadata:
+      labels:
+        app: {{ include "common.fullname" . }}
+
+    spec:
+      serviceAccountName: {{ default (include "common.fullname" . ) .Values.serviceAccount.name }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken | default true }}
+
+      {{- if .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+      {{- end }}
+
+      {{- if .Values.tolerations }}
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+      {{- end }}
+
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- range .Values.image.pullSecrets }}
+        - name: {{ . }}
+        {{- end }}
+      {{- end }}
+
+      containers:
+        - name: {{ include "common.fullname" . }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort | default 8080 }}
+
+          env:
+            {{- if .Values.env }}
+            {{- range $key, $val := .Values.env }}
+            - name: {{ $key }}
+              value: "{{ $val }}"
+            {{- end }}
+            {{- end }}
+
+            {{- if .Values.envVarsConfig }}
+            {{- range .Values.envVarsConfig }}
+            - name: {{ .name }}
+              value: "{{ .value }}"
+            {{- end }}
+            {{- end }}
+
+            {{- if .Values.extraSecretEnv }}
+            {{- range .Values.extraSecretEnv }}
+            - name: {{ .name }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .secretName }}
+                  key: {{ .secretKey }}
+            {{- end }}
+            {{- end }}
+
+          {{- if .Values.health.readiness.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.health.readiness.path | default "/" }}
+              port: {{ .Values.health.port | default .Values.service.targetPort }}
+            initialDelaySeconds: {{ .Values.health.readiness.initialDelaySeconds | default 10 }}
+            timeoutSeconds: {{ .Values.health.readiness.timeoutSeconds | default 2 }}
+            periodSeconds: {{ .Values.health.readiness.periodSeconds | default 10 }}
+            failureThreshold: {{ .Values.health.readiness.failureThreshold | default 4 }}
+          {{- end }}
+
+          {{- if .Values.health.liveness.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.health.liveness.path | default "/" }}
+              port: {{ .Values.health.port | default .Values.service.targetPort }}
+            initialDelaySeconds: {{ .Values.health.liveness.initialDelaySeconds | default 30 }}
+            timeoutSeconds: {{ .Values.health.liveness.timeoutSeconds | default 2 }}
+            periodSeconds: {{ .Values.health.liveness.periodSeconds | default 30 }}
+            failureThreshold: {{ .Values.health.liveness.failureThreshold | default 4 }}
+          {{- end }}
+
+          {{- if .Values.resources }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- end }}
+
+          {{- if .Values.extraVolumeMounts }}
+          volumeMounts:
+            {{- range .Values.extraVolumeMounts }}
+            - name: {{ .name }}
+              mountPath: {{ .mountPath }}
+              {{- if .readOnly }}
+              readOnly: true
+              {{- end }}
+            {{- end }}
+          {{- end }}
+
+      {{- if .Values.extraVolumes }}
+      volumes:
+        {{- range .Values.extraVolumes }}
+        - name: {{ .name }}
+          {{- if .secret }}
+          secret:
+            secretName: {{ .secret.secretName }}
+
+            {{- if .secret.defaultMode }}
+            defaultMode: {{ .secret.defaultMode }}
+            {{- end }}
+
+            {{- if .secret.items }}
+            items:
+              {{- range .secret.items }}
+              - key: {{ .key }}
+                path: {{ .path }}
+              {{- end }}
+            {{- end }}
+
+          {{- end }}
+        {{- end }}
+      {{- end }}
